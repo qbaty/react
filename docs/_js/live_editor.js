@@ -1,8 +1,3 @@
-/**
- * @jsx React.DOM
- */
-
-
 var IS_MOBILE = (
   navigator.userAgent.match(/Android/i)
     || navigator.userAgent.match(/webOS/i)
@@ -79,6 +74,8 @@ var ReactPlayground = React.createClass({
     codeText: React.PropTypes.string.isRequired,
     transformer: React.PropTypes.func,
     renderCode: React.PropTypes.bool,
+    showCompiledJSTab: React.PropTypes.bool,
+    editorTabTitle: React.PropTypes.string
   },
 
   getDefaultProps: function() {
@@ -86,6 +83,7 @@ var ReactPlayground = React.createClass({
       transformer: function(code) {
         return JSXTransformer.transform(code).code;
       },
+      editorTabTitle: 'Live JSX Editor',
       showCompiledJSTab: true
     };
   },
@@ -150,7 +148,7 @@ var ReactPlayground = React.createClass({
       <div
         className={JSXTabClassName}
         onClick={this.handleCodeModeSwitch.bind(this, this.MODES.JSX)}>
-          Live JSX Editor
+          {this.props.editorTabTitle}
       </div>
 
     return (
@@ -192,7 +190,7 @@ var ReactPlayground = React.createClass({
     try {
       var compiledCode = this.compileCode();
       if (this.props.renderCode) {
-        React.renderComponent(
+        React.render(
           <CodeMirrorEditor codeText={compiledCode} readOnly={true} />,
           mountNode
         );
@@ -201,7 +199,7 @@ var ReactPlayground = React.createClass({
       }
     } catch (err) {
       this.setTimeout(function() {
-        React.renderComponent(
+        React.render(
           <div className="playgroundError">{err.toString()}</div>,
           mountNode
         );

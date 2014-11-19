@@ -1,25 +1,16 @@
 /**
- * Copyright 2013-2014 Facebook, Inc.
+ * Copyright 2013-2014, Facebook, Inc.
+ * All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
  */
 'use strict';
 
 var recast = require('recast');
 var types = recast.types;
-var namedTypes = types.namedTypes;
 var builders = types.builders;
-var hasOwn = Object.prototype.hasOwnProperty;
 
 function propagate(constants, source) {
   return recast.print(transform(recast.parse(source), constants)).code;
@@ -39,69 +30,60 @@ var DEV_EXPRESSION = builders.binaryExpression(
   )
 );
 
-function transform(ast, constants) {
-  constants = constants || {};
-
-  return types.traverse(ast, function(node, traverse) {
-    if (namedTypes.Identifier.check(node)) {
-      // If the identifier is the property of a member expression
-      // (e.g. object.property), then it definitely is not a constant
-      // expression that we want to replace.
-      if (namedTypes.MemberExpression.check(this.parent.node) &&
-          this.name === 'property' &&
-          !this.parent.node.computed) {
-        return false;
-      }
-
-      // There could in principle be a constant called "hasOwnProperty",
-      // so be careful always to use Object.prototype.hasOwnProperty.
-      if (node.name === '__DEV__') {
-        // replace __DEV__ with process.env.NODE_ENV !== 'production'
-        this.replace(DEV_EXPRESSION);
-        return false;
-      } else if (hasOwn.call(constants, node.name)) {
-        this.replace(builders.literal(constants[node.name]));
-        return false;
-      }
-
-    } else if (namedTypes.CallExpression.check(node)) {
-      if (namedTypes.Identifier.check(node.callee) &&
-          node.callee.name === 'invariant') {
-        // Truncate the arguments of invariant(condition, ...)
-        // statements to just the condition based on NODE_ENV
-        // (dead code removal will remove the extra bytes).
-        this.replace(
-          builders.conditionalExpression(
-            DEV_EXPRESSION,
-            node,
-            builders.callExpression(
-              node.callee,
-              [node.arguments[0]]
-            )
-          )
-        );
-        return false;
-      } else if (namedTypes.Identifier.check(node.callee) &&
-          node.callee.name === 'warning') {
-        // Eliminate warning(condition, ...) statements based on NODE_ENV
-        // (dead code removal will remove the extra bytes).
-        this.replace(
-          builders.conditionalExpression(
-            DEV_EXPRESSION,
-            node,
-            builders.literal(null)
-          )
-        );
-      }
+var visitors = {
+  visitIdentifier: function(nodePath) {
+    // If the identifier is the property of a member expression
+    // (e.g. object.property), then it definitely is not a constant
+    // expression that we want to replace.
+    if (nodePath.parentPath.value.type === 'MemberExpression') {
+      return false;
     }
-  });
-}
 
-if (!module.parent) {
-  var constants = JSON.parse(process.argv[3]);
-  recast.run(function(ast, callback) {
-    callback(transform(ast, constants));
-  });
+    // replace __DEV__ with process.env.NODE_ENV !== 'production'
+    if (nodePath.value.name === '__DEV__') {
+      nodePath.replace(DEV_EXPRESSION);
+    }
+    // TODO: bring back constant replacement if we decide we need it
+
+    this.traverse(nodePath);
+  },
+
+  visitCallExpression: function(nodePath) {
+    var node = nodePath.value;
+    if (node.callee.name === 'invariant') {
+      // Truncate the arguments of invariant(condition, ...)
+      // statements to just the condition based on NODE_ENV
+      // (dead code removal will remove the extra bytes).
+      nodePath.replace(
+        builders.conditionalExpression(
+          DEV_EXPRESSION,
+          node,
+          builders.callExpression(
+            node.callee,
+            [node.arguments[0]]
+          )
+        )
+      );
+      return false;
+    } else if (node.callee.name === 'warning') {
+      // Eliminate warning(condition, ...) statements based on NODE_ENV
+      // (dead code removal will remove the extra bytes).
+      nodePath.replace(
+        builders.conditionalExpression(
+          DEV_EXPRESSION,
+          node,
+          builders.literal(null)
+        )
+      );
+      return false;
+    }
+    this.traverse(nodePath);
+  }
+};
+
+function transform(ast, constants) {
+  // TODO constants
+  return recast.visit(ast, visitors);
 }
 
 exports.propagate = propagate;

@@ -1,17 +1,10 @@
 /**
- * Copyright 2013-2014 Facebook, Inc.
+ * Copyright 2013-2014, Facebook, Inc.
+ * All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule ReactTestUtils
  */
@@ -22,16 +15,17 @@ var EventConstants = require('EventConstants');
 var EventPluginHub = require('EventPluginHub');
 var EventPropagators = require('EventPropagators');
 var React = require('React');
-var ReactDescriptor = require('ReactDescriptor');
-var ReactDOM = require('ReactDOM');
+var ReactElement = require('ReactElement');
 var ReactBrowserEventEmitter = require('ReactBrowserEventEmitter');
+var ReactCompositeComponent = require('ReactCompositeComponent');
+var ReactInstanceHandles = require('ReactInstanceHandles');
+var ReactInstanceMap = require('ReactInstanceMap');
 var ReactMount = require('ReactMount');
-var ReactTextComponent = require('ReactTextComponent');
 var ReactUpdates = require('ReactUpdates');
 var SyntheticEvent = require('SyntheticEvent');
 
-var mergeInto = require('mergeInto');
-var copyProperties = require('copyProperties');
+var assign = require('Object.assign');
+var instantiateReactComponent = require('instantiateReactComponent');
 
 var topLevelTypes = EventConstants.topLevelTypes;
 
@@ -54,27 +48,29 @@ var ReactTestUtils = {
     // clean up, so we're going to stop honoring the name of this method
     // (and probably rename it eventually) if no problems arise.
     // document.documentElement.appendChild(div);
-    return React.renderComponent(instance, div);
+    return React.render(instance, div);
   },
 
-  isDescriptor: function(descriptor) {
-    return ReactDescriptor.isValidDescriptor(descriptor);
+  isElement: function(element) {
+    return ReactElement.isValidElement(element);
   },
 
-  isDescriptorOfType: function(inst, convenienceConstructor) {
+  isElementOfType: function(inst, convenienceConstructor) {
     return (
-      ReactDescriptor.isValidDescriptor(inst) &&
-      inst.type === convenienceConstructor.type
+      ReactElement.isValidElement(inst) &&
+      inst.type === convenienceConstructor
     );
   },
 
   isDOMComponent: function(inst) {
-    return !!(inst && inst.mountComponent && inst.tagName);
+    // TODO: Fix this heuristic. It's just here because composites can currently
+    // pretend to be DOM components.
+    return !!(inst && inst.getDOMNode && inst.tagName);
   },
 
-  isDOMComponentDescriptor: function(inst) {
+  isDOMComponentElement: function(inst) {
     return !!(inst &&
-              ReactDescriptor.isValidDescriptor(inst) &&
+              ReactElement.isValidElement(inst) &&
               !!inst.tagName);
   },
 
@@ -85,11 +81,11 @@ var ReactTestUtils = {
 
   isCompositeComponentWithType: function(inst, type) {
     return !!(ReactTestUtils.isCompositeComponent(inst) &&
-             (inst.constructor === type.type));
+             (inst.constructor === type));
   },
 
-  isCompositeComponentDescriptor: function(inst) {
-    if (!ReactDescriptor.isValidDescriptor(inst)) {
+  isCompositeComponentElement: function(inst) {
+    if (!ReactElement.isValidElement(inst)) {
       return false;
     }
     // We check the prototype of the type that will get mounted, not the
@@ -101,13 +97,17 @@ var ReactTestUtils = {
     );
   },
 
-  isCompositeComponentDescriptorWithType: function(inst, type) {
-    return !!(ReactTestUtils.isCompositeComponentDescriptor(inst) &&
+  isCompositeComponentElementWithType: function(inst, type) {
+    return !!(ReactTestUtils.isCompositeComponentElement(inst) &&
              (inst.constructor === type));
   },
 
-  isTextComponent: function(inst) {
-    return inst instanceof ReactTextComponent.type;
+  getRenderedChildOfCompositeComponent: function(inst) {
+    if (!ReactTestUtils.isCompositeComponent(inst)) {
+      return null;
+    }
+    var internalInstance = ReactInstanceMap.get(inst);
+    return internalInstance._renderedComponent.getPublicInstance();
   },
 
   findAllInRenderedTree: function(inst, test) {
@@ -116,19 +116,28 @@ var ReactTestUtils = {
     }
     var ret = test(inst) ? [inst] : [];
     if (ReactTestUtils.isDOMComponent(inst)) {
-      var renderedChildren = inst._renderedChildren;
+      var internalInstance = ReactInstanceMap.get(inst);
+      var renderedChildren = internalInstance
+        ._renderedComponent
+        ._renderedChildren;
       var key;
       for (key in renderedChildren) {
         if (!renderedChildren.hasOwnProperty(key)) {
           continue;
         }
         ret = ret.concat(
-          ReactTestUtils.findAllInRenderedTree(renderedChildren[key], test)
+          ReactTestUtils.findAllInRenderedTree(
+            renderedChildren[key].getPublicInstance(),
+            test
+          )
         );
       }
     } else if (ReactTestUtils.isCompositeComponent(inst)) {
       ret = ret.concat(
-        ReactTestUtils.findAllInRenderedTree(inst._renderedComponent, test)
+        ReactTestUtils.findAllInRenderedTree(
+          ReactTestUtils.getRenderedChildOfCompositeComponent(inst),
+          test
+        )
       );
     }
     return ret;
@@ -240,14 +249,13 @@ var ReactTestUtils = {
   mockComponent: function(module, mockTagName) {
     mockTagName = mockTagName || module.mockTagName || "div";
 
-    var ConvenienceConstructor = React.createClass({
-      render: function() {
-        return ReactDOM[mockTagName](null, this.props.children);
-      }
+    module.prototype.render.mockImplementation(function() {
+      return React.createElement(
+        mockTagName,
+        null,
+        this.props.children
+      );
     });
-
-    copyProperties(module, ConvenienceConstructor);
-    module.mockImplementation(ConvenienceConstructor);
 
     return this;
   },
@@ -293,8 +301,51 @@ var ReactTestUtils = {
     };
   },
 
+  createRenderer: function() {
+    return new ReactShallowRenderer();
+  },
+
   Simulate: null,
   SimulateNative: {}
+};
+
+/**
+ * @class ReactShallowRenderer
+ */
+var ReactShallowRenderer = function() {
+  this._instance = null;
+};
+
+ReactShallowRenderer.prototype.getRenderOutput = function() {
+  return (this._instance && this._instance._renderedComponent) || null;
+};
+
+var ShallowComponentWrapper = function(inst) {
+  this._instance = inst;
+}
+assign(
+  ShallowComponentWrapper.prototype,
+  ReactCompositeComponent.ShallowMixin
+);
+
+ReactShallowRenderer.prototype.render = function(element, context) {
+  var transaction = ReactUpdates.ReactReconcileTransaction.getPooled();
+  this._render(element, transaction, context);
+  ReactUpdates.ReactReconcileTransaction.release(transaction);
+};
+
+ReactShallowRenderer.prototype._render = function(element, transaction, context) {
+  if (!this._instance) {
+    var rootID = ReactInstanceHandles.createReactRootID();
+    var instance = new ShallowComponentWrapper(new element.type(element.props));
+    instance.construct(element);
+
+    instance.mountComponent(rootID, transaction, 0, context);
+
+    this._instance = instance;
+  } else {
+    this._instance.receiveComponent(element, transaction, context);
+  }
 };
 
 /**
@@ -323,7 +374,7 @@ function makeSimulator(eventType) {
       ReactMount.getID(node),
       fakeNativeEvent
     );
-    mergeInto(event, eventData);
+    assign(event, eventData);
     EventPropagators.accumulateTwoPhaseDispatches(event);
 
     ReactUpdates.batchedUpdates(function() {
@@ -379,7 +430,7 @@ buildSimulators();
 function makeNativeSimulator(eventType) {
   return function(domComponentOrNode, nativeEventData) {
     var fakeNativeEvent = new Event(eventType);
-    mergeInto(fakeNativeEvent, nativeEventData);
+    assign(fakeNativeEvent, nativeEventData);
     if (ReactTestUtils.isDOMComponent(domComponentOrNode)) {
       ReactTestUtils.simulateNativeEventOnDOMComponent(
         eventType,

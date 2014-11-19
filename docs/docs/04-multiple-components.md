@@ -1,7 +1,6 @@
 ---
 id: multiple-components
 title: Multiple Components
-layout: docs
 permalink: multiple-components.html
 prev: interactivity-and-dynamic-uis.html
 next: reusable-components.html
@@ -20,8 +19,6 @@ By building modular components that reuse other components with well-defined int
 Let's create a simple Avatar component which shows a profile picture and username using the Facebook Graph API.
 
 ```javascript
-/** @jsx React.DOM */
-
 var Avatar = React.createClass({
   render: function() {
     return (
@@ -51,7 +48,7 @@ var ProfileLink = React.createClass({
   }
 });
 
-React.renderComponent(
+React.render(
   <Avatar username="pwh" />,
   document.getElementById('example')
 );
@@ -134,19 +131,59 @@ The situation gets more complicated when the children are shuffled around (as in
 
 When React reconciles the keyed children, it will ensure that any child with `key` will be reordered (instead of clobbered) or destroyed (instead of reused).
 
+The `key` should *always* be supplied directly to the components in the array, not to the container HTML child of each component in the array:
+
+```javascript
+// WRONG!
+var ListItemWrapper = React.createClass({
+  render: function() {
+    return <li key={this.props.data.id}>{this.props.data.text}</li>;
+  }
+});
+var MyComponent = React.createClass({
+  render: function() {
+    return (
+      <ul>
+        {this.props.results.map(function(result) {
+          return <ListItemWrapper data={result}/>;
+        })}
+      </ul>
+    );
+  }
+});
+
+// Correct :)
+var ListItemWrapper = React.createClass({
+  render: function() {
+    return <li>{this.props.data.text}</li>;
+  }
+});
+var MyComponent = React.createClass({
+  render: function() {
+    return (
+      <ul>
+        {this.props.results.map(function(result) {
+           return <ListItemWrapper key={result.id} data={result}/>;
+        })}
+      </ul>
+    );
+  }
+});
+```
+
 You can also key children by passing an object. The object keys will be used as `key` for each value. However it is important to remember that JavaScript does not guarantee the ordering of properties will be preserved. In practice browsers will preserve property order **except** for properties that can be parsed as a 32-bit unsigned integers. Numeric properties will be ordered sequentially and before other properties. If this happens React will render components out of order. This can be avoided by adding a string prefix to the key:
 
 ```javascript
   render: function() {
     var items = {};
-    
+
     this.props.results.forEach(function(result) {
       // If result.id can look like a number (consider short hashes), then
       // object iteration order is not guaranteed. In this case, we add a prefix
       // to ensure the keys are strings.
       items['result-' + result.id] = <li>{result.text}</li>;
     });
-    
+
     return (
       <ol>
         {items}

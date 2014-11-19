@@ -1,19 +1,11 @@
 /**
- * Copyright 2013-2014 Facebook, Inc.
+ * Copyright 2013-2014, Facebook, Inc.
+ * All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
  *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * @jsx React.DOM
  * @emails react-core
  */
 
@@ -22,6 +14,7 @@
 require('mock-modules');
 
 var React = require('React');
+var ReactInstanceMap = require('ReactInstanceMap');
 var ReactTestUtils = require('ReactTestUtils');
 var ReactMount = require('ReactMount');
 
@@ -91,7 +84,13 @@ var FriendsStatusDisplay = React.createClass({
   getStatusDisplays: function() {
     var name;
     var orderOfUsernames = [];
-    var statusDisplays = this._renderedComponent._renderedChildren;
+    // TODO: Update this to a better test that doesn't rely so much on internal
+    // implementation details.
+    var statusDisplays =
+      ReactInstanceMap.get(this)
+      ._renderedComponent
+      ._renderedComponent
+      ._renderedChildren;
     for (name in statusDisplays) {
       var child = statusDisplays[name];
       var isPresent = !!child;
@@ -203,7 +202,7 @@ function verifyDomOrderingAccurate(parentInstance, statusDisplays) {
       continue;
     }
     var statusDisplay = statusDisplays[username];
-    orderedLogicalIds.push(statusDisplay._rootNodeID);
+    orderedLogicalIds.push(ReactInstanceMap.get(statusDisplay)._rootNodeID);
   }
   expect(orderedDomIds).toEqual(orderedLogicalIds);
 }
@@ -213,8 +212,9 @@ function verifyDomOrderingAccurate(parentInstance, statusDisplays) {
  */
 function testPropsSequence(sequence) {
   var i;
-  var parentInstance =
-      ReactTestUtils.renderIntoDocument(FriendsStatusDisplay(sequence[0]));
+  var parentInstance = ReactTestUtils.renderIntoDocument(
+    <FriendsStatusDisplay {...sequence[0]} />
+  );
   var statusDisplays = parentInstance.getStatusDisplays();
   var lastInternalStates = getInteralStateByUserName(statusDisplays);
   verifyStatuses(statusDisplays, sequence[0]);
@@ -243,8 +243,9 @@ describe('ReactMultiChildReconcile', function() {
       }
     };
 
-    var parentInstance =
-        ReactTestUtils.renderIntoDocument(FriendsStatusDisplay(props));
+    var parentInstance = ReactTestUtils.renderIntoDocument(
+      <FriendsStatusDisplay {...props} />
+    );
     var statusDisplays = parentInstance.getStatusDisplays();
     var startingInternalState = statusDisplays.jcw.getInternalState();
 

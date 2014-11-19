@@ -1,17 +1,10 @@
 /**
- * Copyright 2013-2014 Facebook, Inc.
+ * Copyright 2013-2014, Facebook, Inc.
+ * All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule instantiateReactComponent
  * @typechecks static-only
@@ -19,45 +12,121 @@
 
 "use strict";
 
+var ReactCompositeComponent = require('ReactCompositeComponent');
+var ReactEmptyComponent = require('ReactEmptyComponent');
+var ReactNativeComponent = require('ReactNativeComponent');
+
+var assign = require('Object.assign');
 var invariant = require('invariant');
+var warning = require('warning');
+
+// To avoid a cyclic dependency, we create the final class in this module
+var ReactCompositeComponentWrapper = function(inst) {
+  this._instance = inst;
+};
+assign(
+  ReactCompositeComponentWrapper.prototype,
+  ReactCompositeComponent.Mixin,
+  {
+    _instantiateReactComponent: instantiateReactComponent
+  }
+);
 
 /**
- * Validate a `componentDescriptor`. This should be exposed publicly in a follow
- * up diff.
+ * Check if the type reference is a known internal type. I.e. not a user
+ * provided composite type.
  *
- * @param {object} descriptor
- * @return {boolean} Returns true if this is a valid descriptor of a Component.
+ * @param {function} type
+ * @return {boolean} Returns true if this is a valid internal type.
  */
-function isValidComponentDescriptor(descriptor) {
-  return !!descriptor && (
-    (
-      typeof descriptor.type === 'function' &&
-      typeof descriptor.type.prototype.mountComponent === 'function' &&
-      typeof descriptor.type.prototype.receiveComponent === 'function'
-    ) || typeof descriptor.type === 'string'
+function isInternalComponentType(type) {
+  return (
+    typeof type === 'function' &&
+    typeof type.prototype.mountComponent === 'function' &&
+    typeof type.prototype.receiveComponent === 'function'
   );
 }
 
 /**
- * Given a `componentDescriptor` create an instance that will actually be
- * mounted. Currently it just extracts an existing clone from composite
- * components but this is an implementation detail which will change.
+ * Given a ReactNode, create an instance that will actually be mounted.
  *
- * @param {object} descriptor
- * @return {object} A new instance of componentDescriptor's constructor.
+ * @param {ReactNode} node
+ * @param {*} parentCompositeType The composite type that resolved this.
+ * @return {object} A new instance of the element's constructor.
  * @protected
  */
-function instantiateReactComponent(descriptor) {
+function instantiateReactComponent(node, parentCompositeType) {
+  var instance;
 
-  // TODO: Make warning
-  // if (__DEV__) {
+  if (node === null || node === false) {
+    node = ReactEmptyComponent.emptyElement;
+  }
+
+  if (typeof node === 'object') {
+    var element = node;
+    if (__DEV__) {
+      warning(
+        element && (typeof element.type === 'function' ||
+                    typeof element.type === 'string'),
+        'Only functions or strings can be mounted as React components.'
+      );
+    }
+
+    // Special case string values
+    if (typeof element.type === 'string') {
+      instance = ReactNativeComponent.createInstanceForTag(
+        element.type,
+        element.props,
+        parentCompositeType
+      );
+      // If the injected special class is not an internal class, but another
+      // composite, then we must wrap it.
+      // TODO: Move this resolution around to something cleaner.
+      if (typeof instance.mountComponent !== 'function') {
+        instance = new ReactCompositeComponentWrapper(instance);
+      }
+    } else if (isInternalComponentType(element.type)) {
+      // This is temporarily available for custom components that are not string
+      // represenations. I.e. ART. Once those are updated to use the string
+      // representation, we can drop this code path.
+      instance = new element.type(element);
+    } else {
+      // TODO: Update to follow new ES6 initialization. Ideally, we can use
+      // props in property initializers.
+      var inst = new element.type(element.props);
+      instance = new ReactCompositeComponentWrapper(inst);
+    }
+  } else if (typeof node === 'string' || typeof node === 'number') {
+    instance = ReactNativeComponent.createInstanceForText(node);
+  } else {
     invariant(
-      isValidComponentDescriptor(descriptor),
-      'Only React Components are valid for mounting.'
+      false,
+      'Encountered invalid React node of type ' + typeof node
     );
-  // }
+  }
 
-  return new descriptor.type(descriptor);
+  if (__DEV__) {
+    warning(
+      typeof instance.construct === 'function' &&
+      typeof instance.mountComponent === 'function' &&
+      typeof instance.receiveComponent === 'function' &&
+      typeof instance.unmountComponent === 'function',
+      'Only React Components can be mounted.'
+    );
+  }
+
+  // Sets up the instance. This can probably just move into the constructor now.
+  instance.construct(node);
+
+  // Internal instances should fully constructed at this point, so they should
+  // not get any new fields added to them at this point.
+  if (__DEV__) {
+    if (Object.preventExtensions) {
+      Object.preventExtensions(instance);
+    }
+  }
+
+  return instance;
 }
 
 module.exports = instantiateReactComponent;

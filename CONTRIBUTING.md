@@ -41,14 +41,16 @@ The best way to get your bug fixed is to provide a reduced test case. jsFiddle, 
 
 ### Security Bugs
 
-Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe disclosure of security bugs. With that in mind, please do not file public issues and go through the process outlined on that page.
+Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe disclosure of security bugs. With that in mind, please do not file public issues; go through the process outlined on that page.
 
 ## How to Get in Touch
 
 * IRC - [#reactjs on freenode](http://webchat.freenode.net/?channels=reactjs)
 * Mailing list - [reactjs on Google Groups](http://groups.google.com/group/reactjs)
 
-## Coding Style
+## Style Guide
+
+### Code
 
 * Use semicolons;
 * Commas last,
@@ -59,6 +61,10 @@ Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe
 * "Attractive"
 * Do not use the optional parameters of `setTimeout` and `setInterval`
 
+### Documentation
+
+* Do not wrap lines at 80 characters
+
 ## License
 
-By contributing to React, you agree that your contributions will be licensed under the [Apache License Version 2.0 (APLv2)](LICENSE).
+By contributing to React, you agree that your contributions will be licensed under its BSD license..
