@@ -69,7 +69,8 @@ function assertValidProps(props) {
   invariant(
     props.style == null || typeof props.style === 'object',
     'The `style` prop expects a mapping from style properties to values, ' +
-    'not a string.'
+    'not a string. For example, style={{marginRight: spacing + \'em\'}} when ' +
+    'using JSX.'
   );
 }
 
@@ -168,15 +169,13 @@ ReactDOMComponent.Mixin = {
    * @internal
    * @param {string} rootID The root DOM ID for this node.
    * @param {ReactReconcileTransaction|ReactServerRenderingTransaction} transaction
-   * @param {number} mountDepth number of components in the owner hierarchy
    * @return {string} The computed markup.
    */
-  mountComponent: function(rootID, transaction, mountDepth, context) {
+  mountComponent: function(rootID, transaction, context) {
     ReactComponent.Mixin.mountComponent.call(
       this,
       rootID,
       transaction,
-      mountDepth,
       context
     );
     this._rootNodeID = rootID;

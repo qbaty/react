@@ -225,7 +225,8 @@ function mountComponentIntoNode(
     container,
     transaction,
     shouldReuseMarkup) {
-  var markup = this.mountComponent(rootID, transaction, 0, emptyObject);
+  var markup = this.mountComponent(rootID, transaction, emptyObject);
+  this._isTopLevel = true;
   ReactMount._mountImageIntoNode(markup, container, shouldReuseMarkup);
 }
 
@@ -266,16 +267,16 @@ var ReactMount = {
   /**
    * Take a component that's already mounted into the DOM and replace its props
    * @param {ReactComponent} prevComponent component instance already in the DOM
-   * @param {ReactComponent} nextComponent component instance to render
+   * @param {ReactElement} nextElement component instance to render
    * @param {DOMElement} container container to render into
    * @param {?function} callback function triggered on completion
    */
   _updateRootComponent: function(
       prevComponent,
-      nextComponent,
+      nextElement,
       container,
       callback) {
-    var nextProps = nextComponent.props;
+    var nextProps = nextElement.props;
     ReactMount.scrollMonitor(container, function() {
       prevComponent.replaceProps(nextProps, callback);
     });
@@ -376,7 +377,7 @@ var ReactMount = {
   render: function(nextElement, container, callback) {
     invariant(
       ReactElement.isValidElement(nextElement),
-      'renderComponent(): Invalid component element.%s',
+      'React.render(): Invalid component element.%s',
       (
         typeof nextElement === 'string' ?
           ' Instead of passing an element string, make sure to instantiate ' +
@@ -755,7 +756,7 @@ var ReactMount = {
       'You\'re trying to render a component to the document but ' +
         'you didn\'t use server rendering. We can\'t do this ' +
         'without using server rendering due to cross-browser quirks. ' +
-        'See renderComponentToString() for server rendering.'
+        'See React.renderToString() for server rendering.'
     );
 
     setInnerHTML(container, markup);

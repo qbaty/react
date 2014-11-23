@@ -328,7 +328,7 @@ describe('ReactDOMComponent', function() {
           _owner: null,
           _context: null
         });
-        return stubComponent.mountComponent('test', transaction, 0, {});
+        return stubComponent.mountComponent('test', transaction, {});
       };
     });
 
@@ -353,7 +353,8 @@ describe('ReactDOMComponent', function() {
         mountComponent({ style: 'display: none' });
       }).toThrow(
         'Invariant Violation: The `style` prop expects a mapping from style ' +
-        'properties to values, not a string.'
+        'properties to values, not a string. For example, ' +
+        'style={{marginRight: spacing + \'em\'}} when using JSX.'
       );
     });
   });
@@ -398,7 +399,8 @@ describe('ReactDOMComponent', function() {
         React.render(<div style={1}></div>, container);
       }).toThrow(
         'Invariant Violation: The `style` prop expects a mapping from style ' +
-        'properties to values, not a string.'
+        'properties to values, not a string. For example, ' +
+        'style={{marginRight: spacing + \'em\'}} when using JSX.'
       );
     });
   });

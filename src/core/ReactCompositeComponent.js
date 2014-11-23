@@ -100,6 +100,14 @@ var CompositeLifeCycle = keyMirror({
 });
 
 /**
+ * An incrementing ID assigned to each component when it is mounted. This is
+ * used to enforce the order in which `ReactUpdates` updates dirty components.
+ *
+ * @private
+ */
+var nextMountID = 1;
+
+/**
  * @lends {ReactCompositeComponent.prototype}
  */
 var ReactCompositeComponentMixin = assign({},
@@ -132,6 +140,8 @@ var ReactCompositeComponentMixin = assign({},
     ReactComponent.Mixin.construct.apply(this, arguments);
 
     this._context = null;
+    this._mountOrder = 0;
+    this._isTopLevel = false;
 
     // See ReactUpdates.
     this._pendingCallbacks = null;
@@ -152,21 +162,20 @@ var ReactCompositeComponentMixin = assign({},
    *
    * @param {string} rootID DOM ID of the root node.
    * @param {ReactReconcileTransaction|ReactServerRenderingTransaction} transaction
-   * @param {number} mountDepth number of components in the owner hierarchy
    * @return {?string} Rendered markup to be inserted into the DOM.
    * @final
    * @internal
    */
-  mountComponent: function(rootID, transaction, mountDepth, context) {
+  mountComponent: function(rootID, transaction, context) {
     ReactComponent.Mixin.mountComponent.call(
       this,
       rootID,
       transaction,
-      mountDepth,
       context
     );
 
     this._context = context;
+    this._mountOrder = nextMountID++;
     this._rootNodeID = rootID;
 
     var inst = this._instance;
@@ -223,7 +232,6 @@ var ReactCompositeComponentMixin = assign({},
     var markup = this._renderedComponent.mountComponent(
       rootID,
       transaction,
-      mountDepth + 1,
       this._processChildContext(context)
     );
     if (inst.componentDidMount) {
@@ -303,7 +311,7 @@ var ReactCompositeComponentMixin = assign({},
    */
   replaceProps: function(props, callback) {
     invariant(
-      this._mountDepth === 0,
+      this._isTopLevel,
       'replaceProps(...): You called `setProps` or `replaceProps` on a ' +
       'component with a parent. This is an anti-pattern since props will ' +
       'get reactively updated when rendered. Instead, change the owner\'s ' +
@@ -509,7 +517,7 @@ var ReactCompositeComponentMixin = assign({},
           propTypes[propName](props, propName, componentName, location);
         if (error instanceof Error) {
           // We may want to extend this logic for similar errors in
-          // renderComponent calls, so I'm abstracting it away into
+          // React.render calls, so I'm abstracting it away into
           // a function to minimize refactoring in the future
           var addendum = getDeclarationErrorAddendum(this);
           warning(false, error.message + addendum);
@@ -771,7 +779,6 @@ var ReactCompositeComponentMixin = assign({},
       var nextMarkup = this._renderedComponent.mountComponent(
         thisID,
         transaction,
-        this._mountDepth + 1,
         context
       );
       ReactComponentEnvironment.replaceNodeWithMarkupByID(
@@ -857,7 +864,7 @@ var ReactCompositeComponentMixin = assign({},
 
   /**
    * Get the publicly accessible representation of this component - i.e. what
-   * is exposed by refs and renderComponent. Can be null for stateless
+   * is exposed by refs and returned by React.render. Can be null for stateless
    * components.
    *
    * @return {ReactComponent} the public component instance.
@@ -880,17 +887,15 @@ var ShallowMixin = assign({},
    *
    * @param {string} rootID DOM ID of the root node.
    * @param {ReactReconcileTransaction|ReactServerRenderingTransaction} transaction
-   * @param {number} mountDepth number of components in the owner hierarchy
    * @return {ReactElement} Shallow rendering of the component.
    * @final
    * @internal
    */
-  mountComponent: function(rootID, transaction, mountDepth, context) {
+  mountComponent: function(rootID, transaction, context) {
     ReactComponent.Mixin.mountComponent.call(
       this,
       rootID,
       transaction,
-      mountDepth,
       context
     );
 
